@@ -14,3 +14,4 @@ Following external Tools are needed:
 Usage:
  • First set the INI File Parameters, self-explanatory
  • As AutoDecoder: Just run the script in an folder
+ • As AutoRotater+Autodecoder: For MP4 Movie Files of a smartphone (avi/mp4 only), run with Paramater: -r %FilePathToMovieFile%
