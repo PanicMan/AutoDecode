@@ -1,7 +1,7 @@
 AutoDecode
 ==========
 
-Decodes automatically whole movie folders to x264/ogg and scales it down
+Decodes automatically using AutoHotkey whole movie folders to x264/ogg and scales it down
 
 Following external Tools are needed:
  • Autohotkey (http://www.autohotkey.com/)

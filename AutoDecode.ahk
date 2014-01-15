@@ -401,6 +401,7 @@ ConvertFile(sFileName, sFileExt)
 			{
 				bTryDS := false
 				bTryAvs2Pipe := false
+				bTryAvs2Pipe2 := false
 				bWMVasDS := (sFileExt = "wmv")
 				
 				Loop
@@ -421,6 +422,12 @@ ConvertFile(sFileName, sFileExt)
 						LoadPlugin = --lp "%MeGuiPath%tools\avs\directshowsource.dll"
 						RunScript = --script "DirectShowSource(^%sFileName%^, fps=%nFPS%, audio=true)"
 					}
+					else if (bTryAvs2Pipe2)
+					{
+						ToolPathAndName = %MeGuiPath%tools\avs2pipemod\avs2pipemod.exe
+						LoadPlugin =
+						RunScript = -wav "%sFileName%_audio2.avs"
+					}
 					else if (bTryAvs2Pipe)
 					{
 						ToolPathAndName = %MeGuiPath%tools\avs2pipemod\avs2pipemod.exe
@@ -433,10 +440,19 @@ ConvertFile(sFileName, sFileExt)
 						RunScript = --script "FFAudioSource(^%sFileName%^, cachefile=^%sFileName%.ffindex^)"
 					}
 					
-					RunWait, %comspec% /c %ToolPathAndName% %LoadPlugin% %RunScript% | %TargetCommand%,, Min UseErrorLevel
-					if ErrorLevel != 0
+					;Hier anders, da es öffter hängen bleibt, starten und weiter
+					Run, %comspec% /c %ToolPathAndName% %LoadPlugin% %RunScript% | %TargetCommand%,, Min UseErrorLevel, runID
+					WinWait, ahk_pid %runID%,,5 ;5 Sec warten bis startet
+					if ErrorLevel = 0 
 					{
-						sCommand = Flags: bTryDS=%bTryDS%, bWMVasDS=%bWMVasDS%, bTryAvs2Pipe=%bTryAvs2Pipe%`n%ToolPathAndName% %LoadPlugin% %RunScript% | %TargetCommand%
+						WinWaitClose, ahk_pid %runID%,,600 ;10 Min warten bis fertig
+						if ErrorLevel != 0 
+							WinKill, ahk_pid %runID%
+					}
+					
+					IfNotExist %sFileName%_track1.ogg
+					{
+						sCommand = Flags: bTryDS=%bTryDS%, bWMVasDS=%bWMVasDS%, bTryAvs2Pipe=%bTryAvs2Pipe%, bTryAvs2Pipe2=%bTryAvs2Pipe2%`n%ToolPathAndName% %LoadPlugin% %RunScript% | %TargetCommand%
 						CreateErrorFile(sFileName, sCommand, ErrorLevel, A_LastError)
 						
 						if (sFileExt = "wmv" and bWMVasDS)
@@ -447,6 +463,8 @@ ConvertFile(sFileName, sFileExt)
 							bTryDS := true
 						else if (sFileExt != "avi" AND bTryAvs2Pipe = false)
 							bTryAvs2Pipe := true
+						else if (sFileExt != "avi" AND bTryAvs2Pipe = true AND bTryAvs2Pipe2 = false)
+							bTryAvs2Pipe2 := true
 						else
 							return
 					}
@@ -548,6 +566,7 @@ ConvertFile(sFileName, sFileExt)
 		{
 			FileDelete, %sFileName%.avs
 			FileDelete, %sFileName%_audio.avs
+			FileDelete, %sFileName%_audio2.avs
 			FileDelete, %sFileName%.ffindex
 			FileDelete, %sFileName%_track1.ogg
 			FileDelete, %sFileName%.stats
@@ -590,6 +609,12 @@ CreateAvsFile(sFileName, sFileExt, nWidth, nHeight, nFPS, bForceDS=0)
 		;Noch eine fürs Audio erstellen, vorhandene löschen
 		FileDelete, %sFileName%_audio.avs
 		FileAppend, #File auto created by %A_ScriptName% (Params: %sParams%)`n%LibIncludeAudio%`n%FileSourceAudio%, %sFileName%_audio.avs
+		
+		FileSourceAudio = DirectShowSource("%sFileName%", fps=%nFPS%, audio=true)
+		
+		;Noch eine fürs Audio erstellen, vorhandene löschen
+		FileDelete, %sFileName%_audio2.avs
+		FileAppend, #File auto created by %A_ScriptName% (Params: %sParams%)`n%FileSourceAudio%, %sFileName%_audio2.avs
 	}
 
 	; Temporär Höhe mit Breite tauschen
