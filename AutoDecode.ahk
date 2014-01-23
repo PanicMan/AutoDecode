@@ -32,6 +32,8 @@ IniRead, nMiBpS, %UseIniFile%, General, MiBpS
 IniRead, nLoReso, %UseIniFile%, General, LoReso
 IniRead, nLoBpS, %UseIniFile%, General, LoBpS
 IniRead, NetWorkMode, %UseIniFile%, General, Network
+IniRead, nRotOnlyRes, %UseIniFile%, General, RotOnlyRes
+IniRead, nRotOnlyBps, %UseIniFile%, General, RotOnlyBps
 
 ;-- MediaInfo Initialisieren
 hModule := DllCall("LoadLibrary", "str", MeGuiPath . "MediaInfo.dll")  ; Avoids the need for subsequent DllCalls to load the library
@@ -234,7 +236,7 @@ ExitApp
 ;-------------------------------------------------------------------------------------------------------------------
 ConvertFile(sFileName, sFileExt) 
 {
-	global MeGuiPath, nHiReso, nHiBpS, nMiReso, nMiBpS, nLoReso, nLoBpS, sCommand, NetWorkMode, sFileNamePure, g_sRotate, g_bRotateOnly, g_bPortraitMode, sTempWorkDir
+	global MeGuiPath, nHiReso, nHiBpS, nMiReso, nMiBpS, nLoReso, nLoBpS, sCommand, NetWorkMode, nRotOnlyRes, nRotOnlyBps, sFileNamePure, g_sRotate, g_bRotateOnly, g_bPortraitMode, sTempWorkDir
 	Menu, tray, tip, %A_ScriptName%`nCurrent: %sFileName%
 	
 	StringTrimRight, sFileNameOut, sFileName, 4
@@ -447,10 +449,17 @@ ConvertFile(sFileName, sFileExt)
 					{
 						WinWaitClose, ahk_pid %runID%,,600 ;10 Min warten bis fertig
 						if ErrorLevel != 0 
-							WinKill, ahk_pid %runID%
+						{
+							while (WinExist("ahk_pid " runID))
+								WinKill, ahk_pid %runID%
+						
+							;Evtl vorhandene Reste von Audio löschen
+							FileDelete, %sFileName%_track1.ogg
+							FileDelete, %sFileName%.m4a
+						}	
 					}
 					
-					IfNotExist %sFileName%_track1.ogg
+					If (!FileExist(sFileName "_track1.ogg") AND !FileExist(sFileName ".m4a"))
 					{
 						sCommand = Flags: bTryDS=%bTryDS%, bWMVasDS=%bWMVasDS%, bTryAvs2Pipe=%bTryAvs2Pipe%, bTryAvs2Pipe2=%bTryAvs2Pipe2%`n%ToolPathAndName% %LoadPlugin% %RunScript% | %TargetCommand%
 						CreateErrorFile(sFileName, sCommand, ErrorLevel, A_LastError)
@@ -487,6 +496,9 @@ ConvertFile(sFileName, sFileExt)
 			nBitrate := nHiBpS
 		else if nTemp >= %nMiReso%
 			nBitrate := nMiBpS
+		
+		if (g_bRotateOnly)
+			nBitrate := nRotOnlyBps
 		
 		;erster und zweiter pass
 		if (bStep4 = false)
@@ -582,7 +594,7 @@ ConvertFile(sFileName, sFileExt)
 ;-------------------------------------------------------------------------------------------------------------------
 CreateAvsFile(sFileName, sFileExt, nWidth, nHeight, nFPS, bForceDS=0)
 {
-	global MeGuiPath, nHiReso, nMiReso, nLoReso, g_sRotate, g_bRotateOnly, g_bPortraitMode
+	global MeGuiPath, nHiReso, nMiReso, nLoReso, nRotOnlyRes, g_sRotate, g_bRotateOnly, g_bPortraitMode
 	sParams = %sFileName%, %sFileExt%, %nWidth%, %nHeight%, %nFPS%, %bForceDS%
 	bExtraAudioAvs := true ;einfach immer anlegen, schadet nix
 	
@@ -610,7 +622,7 @@ CreateAvsFile(sFileName, sFileExt, nWidth, nHeight, nFPS, bForceDS=0)
 		FileDelete, %sFileName%_audio.avs
 		FileAppend, #File auto created by %A_ScriptName% (Params: %sParams%)`n%LibIncludeAudio%`n%FileSourceAudio%, %sFileName%_audio.avs
 		
-		FileSourceAudio = DirectShowSource("%sFileName%", fps=%nFPS%, audio=true)
+		FileSourceAudio = DirectShowSource("%sFileName%", fps=%nFPS%, audio=true, convertfps=true).AssumeFPS(%nFPS%)
 		
 		;Noch eine fürs Audio erstellen, vorhandene löschen
 		FileDelete, %sFileName%_audio2.avs
@@ -633,6 +645,9 @@ CreateAvsFile(sFileName, sFileExt, nWidth, nHeight, nFPS, bForceDS=0)
 		nWidthNew := nMiReso
 	else if nWidth >= %nLoReso%
 		nWidthNew := nLoReso
+		
+	if (g_bRotateOnly AND nWidth > nRotOnlyRes)
+		nWidthNew := nRotOnlyRes
 	
 	FileResize = 
 	if nWidthNew <> %nWidth%
