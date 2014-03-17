@@ -119,6 +119,7 @@ if 0 > 0
 				FileRemoveDir, %sTempWorkDir%, 1
 			}
 		}
+		SoundPlay *-1
 	}
 	else
 		MsgBox Falsche Parameter!`nNur -ao/-rr akzeptiert!
@@ -228,6 +229,7 @@ Loop, *.*,, 1
 
 ;-- MediaInfo entladen
 DllCall("FreeLibrary", "UInt", hModule)  ; To conserve memory, the DLL may be unloaded after using it.
+SoundPlay *-1
 
 if g_bShutdown ;Wenn Shutdown, herunterfahren
 	RunWait, %comspec% /c shutdown /s /t 60,, Min UseErrorLevel
