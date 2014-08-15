@@ -18,6 +18,7 @@ g_bShutdown := false
 g_sRotate = #NoRotate
 g_bRotateOnly := false
 g_bPortraitMode := false
+g_bUseLSMASH := false
 
 ;--- Priorität ändern
 Process, priority, , Low  ; Have the script set itself to Low priority.
@@ -238,7 +239,7 @@ ExitApp
 ;-------------------------------------------------------------------------------------------------------------------
 ConvertFile(sFileName, sFileExt) 
 {
-	global MeGuiPath, nHiReso, nHiBpS, nMiReso, nMiBpS, nLoReso, nLoBpS, sCommand, NetWorkMode, nRotOnlyRes, nRotOnlyBps, sFileNamePure, g_sRotate, g_bRotateOnly, g_bPortraitMode, sTempWorkDir
+	global MeGuiPath, nHiReso, nHiBpS, nMiReso, nMiBpS, nLoReso, nLoBpS, sCommand, NetWorkMode, nRotOnlyRes, nRotOnlyBps, sFileNamePure, g_sRotate, g_bRotateOnly, g_bPortraitMode, sTempWorkDir, g_bUseLSMASH
 	Menu, tray, tip, %A_ScriptName%`nCurrent: %sFileName%
 	
 	StringTrimRight, sFileNameOut, sFileName, 4
@@ -387,9 +388,12 @@ ConvertFile(sFileName, sFileExt)
 					sCommand = %ToolPathAndName% -t -1 -f "%sFileName%" "%sFileName%.ffindex"
 					CreateErrorFile(sFileName, sCommand, ErrorLevel, A_LastError)
 					
-					;Bei wmv einfach weitermachen, da dann wohl über DS geht
+					;Bei wmv einfach weitermachen, da dann wohl über DS geht, sonst LSMASH benutzen
 					if sFileExt != wmv
-						return
+					{
+						g_bUseLSMASH := true
+						CreateAvsFile(sFileName, sFileExt, nWidth_Original ? nWidth_Original : nWidth, nHeight_Original ? nHeight_Original : nHeight, nFPS, g_bRotateOnly)
+					}
 				}
 				else
 					AppendLogFile(sFileName, 2, "ffmsindex")
@@ -406,7 +410,14 @@ ConvertFile(sFileName, sFileExt)
 				bTryDS := false
 				bTryAvs2Pipe := false
 				bTryAvs2Pipe2 := false
+				bTryAvs2Pipe3 := false
 				bWMVasDS := (sFileExt = "wmv")
+				if (g_bUseLSMASH)
+				{
+					bTryAvs2Pipe := true
+					bTryAvs2Pipe2 := true
+					bTryAvs2Pipe3 := true
+				}
 				
 				Loop
 				{
@@ -425,6 +436,12 @@ ConvertFile(sFileName, sFileExt)
 					{
 						LoadPlugin = --lp "%MeGuiPath%tools\avs\directshowsource.dll"
 						RunScript = --script "DirectShowSource(^%sFileName%^, fps=%nFPS%, audio=true)"
+					}
+					else if (bTryAvs2Pipe3)
+					{
+						ToolPathAndName = %MeGuiPath%tools\avs2pipemod\avs2pipemod.exe
+						LoadPlugin =
+						RunScript = -wav "%sFileName%_audio3.avs"
 					}
 					else if (bTryAvs2Pipe2)
 					{
@@ -463,7 +480,7 @@ ConvertFile(sFileName, sFileExt)
 					
 					If (!FileExist(sFileName "_track1.ogg") AND !FileExist(sFileName ".m4a"))
 					{
-						sCommand = Flags: bTryDS=%bTryDS%, bWMVasDS=%bWMVasDS%, bTryAvs2Pipe=%bTryAvs2Pipe%, bTryAvs2Pipe2=%bTryAvs2Pipe2%`n%ToolPathAndName% %LoadPlugin% %RunScript% | %TargetCommand%
+						sCommand = Flags: bTryDS=%bTryDS%, bWMVasDS=%bWMVasDS%, bTryAvs2Pipe=%bTryAvs2Pipe%, bTryAvs2Pipe2=%bTryAvs2Pipe2%, bTryAvs2Pipe3=%bTryAvs2Pipe3%`n%ToolPathAndName% %LoadPlugin% %RunScript% | %TargetCommand%
 						CreateErrorFile(sFileName, sCommand, ErrorLevel, A_LastError)
 						
 						if (sFileExt = "wmv" and bWMVasDS)
@@ -476,12 +493,14 @@ ConvertFile(sFileName, sFileExt)
 							bTryAvs2Pipe := true
 						else if (sFileExt != "avi" AND bTryAvs2Pipe = true AND bTryAvs2Pipe2 = false)
 							bTryAvs2Pipe2 := true
+						else if (sFileExt != "avi" AND bTryAvs2Pipe = true AND bTryAvs2Pipe2 = true AND bTryAvs2Pipe3 = false)
+							bTryAvs2Pipe3 := true
 						else
 							return
 					}
 					else
 					{
-						sLogText = Decode/Encode Audio (WMVasDS=%bWMVasDS%, TryDS=%bTryDS%, TryAvs2Pipe=%bTryAvs2Pipe%)
+						sLogText = Decode/Encode Audio (WMVasDS=%bWMVasDS%, TryDS=%bTryDS%, TryAvs2Pipe=%bTryAvs2Pipe%|%bTryAvs2Pipe2%|%bTryAvs2Pipe3%)
 						AppendLogFile(sFileName, 3, sLogText)
 						if bWMVasDS
 							CreateAvsFile(sFileName, sFileExt, nWidth_Original ? nWidth_Original : nWidth, nHeight_Original ? nHeight_Original : nHeight, nFPS, true)
@@ -581,7 +600,9 @@ ConvertFile(sFileName, sFileExt)
 			FileDelete, %sFileName%.avs
 			FileDelete, %sFileName%_audio.avs
 			FileDelete, %sFileName%_audio2.avs
+			FileDelete, %sFileName%_audio3.avs
 			FileDelete, %sFileName%.ffindex
+			FileDelete, %sFileName%.lwi
 			FileDelete, %sFileName%_track1.ogg
 			FileDelete, %sFileName%.stats
 			FileDelete, %sFileName%.stats.mbtree
@@ -596,8 +617,8 @@ ConvertFile(sFileName, sFileExt)
 ;-------------------------------------------------------------------------------------------------------------------
 CreateAvsFile(sFileName, sFileExt, nWidth, nHeight, nFPS, bForceDS=0)
 {
-	global MeGuiPath, nHiReso, nMiReso, nLoReso, nRotOnlyRes, g_sRotate, g_bRotateOnly, g_bPortraitMode
-	sParams = %sFileName%, %sFileExt%, %nWidth%, %nHeight%, %nFPS%, %bForceDS%
+	global MeGuiPath, nHiReso, nMiReso, nLoReso, nRotOnlyRes, g_sRotate, g_bRotateOnly, g_bPortraitMode, g_bUseLSMASH
+	sParams = %sFileName%, %sFileExt%, %nWidth%, %nHeight%, %nFPS%, ForceDS:%bForceDS%, UseLSMASH:%g_bUseLSMASH%
 	bExtraAudioAvs := true ;einfach immer anlegen, schadet nix
 	
 	;Bei AVI anders
@@ -608,6 +629,11 @@ CreateAvsFile(sFileName, sFileExt, nWidth, nHeight, nFPS, bForceDS=0)
 			FileSource = DirectShowSource("%sFileName%", fps=%nFPS%, audio=false)
 		else
 			FileSource = DirectShowSource("%sFileName%", fps=%nFPS%, audio=false, convertfps=true).AssumeFPS(%nFPS%)
+	}
+	else if (g_bUseLSMASH)
+	{
+		LibInclude = LoadPlugin("%MeGuiPath%tools\lsmash\LSMASHSource.dll")
+		FileSource = LWLibavVideoSource("%sFileName%")
 	}
 	else
 	{
@@ -629,6 +655,12 @@ CreateAvsFile(sFileName, sFileExt, nWidth, nHeight, nFPS, bForceDS=0)
 		;Noch eine fürs Audio erstellen, vorhandene löschen
 		FileDelete, %sFileName%_audio2.avs
 		FileAppend, #File auto created by %A_ScriptName% (Params: %sParams%)`n%FileSourceAudio%, %sFileName%_audio2.avs
+
+		;Noch eine fürs LSMASH Audio erstellen, vorhandene löschen
+		FileDelete, %sFileName%_audio3.avs
+		LibIncludeAudio = LoadPlugin("%MeGuiPath%tools\lsmash\LSMASHSource.dll")
+		FileSourceAudio = LWLibavAudioSource("%sFileName%")
+		FileAppend, #File auto created by %A_ScriptName% (Params: %sParams%)`n%LibIncludeAudio%`n%FileSourceAudio%, %sFileName%_audio3.avs
 	}
 
 	; Temporär Höhe mit Breite tauschen
