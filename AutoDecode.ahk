@@ -673,16 +673,22 @@ CreateAvsFile(sFileName, sFileExt, nWidth, nHeight, nFPS, bForceDS=0)
 	
 	;Auflösung für resize bestimmen
 	nWidthNew := nWidth
-	if nWidth >= %nHiReso%
-		nWidthNew := nHiReso
-	else if nWidth >= %nMiReso%
-		nWidthNew := nMiReso
-	else if nWidth >= %nLoReso%
-		nWidthNew := nLoReso
-		
-	if (g_bRotateOnly AND nWidth > nRotOnlyRes)
-		nWidthNew := nRotOnlyRes
 	
+	if (g_bRotateOnly)
+	{
+		if (nWidth > nRotOnlyRes)
+			nWidthNew := nRotOnlyRes
+	}
+	else
+	{
+		if nWidth >= %nHiReso%
+			nWidthNew := nHiReso
+		else if nWidth >= %nMiReso%
+			nWidthNew := nMiReso
+		else if nWidth >= %nLoReso%
+			nWidthNew := nLoReso
+	}
+			
 	FileResize = 
 	if nWidthNew <> %nWidth%
 	{
