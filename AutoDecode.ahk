@@ -19,6 +19,8 @@ g_sRotate = #NoRotate
 g_bRotateOnly := false
 g_bPortraitMode := false
 g_bUseLSMASH := false
+g_bSeriesConvert := false
+g_bSeriesConvertAnim := false
 
 ;--- Priorität ändern
 Process, priority, , Low  ; Have the script set itself to Low priority.
@@ -35,6 +37,9 @@ IniRead, nLoBpS, %UseIniFile%, General, LoBpS
 IniRead, NetWorkMode, %UseIniFile%, General, Network
 IniRead, nRotOnlyRes, %UseIniFile%, General, RotOnlyRes
 IniRead, nRotOnlyBps, %UseIniFile%, General, RotOnlyBps
+IniRead, nSeriesRes, %UseIniFile%, General, SeriesRes
+IniRead, nSeriesBps, %UseIniFile%, General, SeriesBps
+IniRead, nSeriesABps, %UseIniFile%, General, SeriesABps
 
 ;-- MediaInfo Initialisieren
 hModule := DllCall("LoadLibrary", "str", MeGuiPath . "MediaInfo.dll")  ; Avoids the need for subsequent DllCalls to load the library
@@ -42,90 +47,102 @@ hModule := DllCall("LoadLibrary", "str", MeGuiPath . "MediaInfo.dll")  ; Avoids 
 ;Wenn Parameter übergeben, diese auswerten
 if 0 > 0
 {
-	if 2 = 
-		MsgBox Kein Dateiname als 2. Parameter!
-	else if 1 = -ao ;Nur Audio dekodieren
+	if 1 = -SeriesConvert
 	{
-		FileDelete, %2%.avs
-		FileAppend, #File auto created by %A_ScriptName%, %2%.avs
-		FileAppend, `nLoadPlugin("%MeGuiPath%tools\ffms\ffms2.dll"), %2%.avs
-		FileAppend, `nFFAudioSource("%2%"), %2%.avs
-	
-		Tool = %MeGuiPath%tools\avs2pipemod\avs2pipemod.exe
-		Script = -wav "%2%.avs"
-		RunWait, %comspec% /c %Tool% %Script% | %MeGuiPath%tools\oggenc2\oggenc2.exe -Q --ignorelength --quality 2.0 -o "%2%_track1.ogg" -,, Min UseErrorLevel
-		
-		if ErrorLevel = 0
+		g_bSeriesConvert := true
+		if 2 = -IsAnim
+			g_bSeriesConvertAnim := true
+	}
+	else
+	{
+		if 2 = 
+			MsgBox Kein Dateiname als 2. Parameter!
+		else if 1 = -ao ;Nur Audio dekodieren
 		{
-			sFileOut = %2%
-			StringTrimRight, sFileOut, sFileOut, 4
-			
-			Tool = %MeGuiPath%tools\mkvmerge\mkvmerge.exe
-			RunWait, %comspec% /c %Tool% -o "%2%.mkv" --engage keep_bitstream_ar_info "--compression" "0:none" -d "0" --no-chapters -A -S "%sFileOut%.mkv" "--compression" "0:none" -a 0 --no-chapters -D -S "%2%_track1.ogg" --engage no_cue_duration --engage no_cue_relative_position --ui-language en,, Min UseErrorLevel
+			FileDelete, %2%.avs
+			FileAppend, #File auto created by %A_ScriptName%, %2%.avs
+			FileAppend, `nLoadPlugin("%MeGuiPath%tools\ffms\ffms2.dll"), %2%.avs
+			FileAppend, `nFFAudioSource("%2%"), %2%.avs
+		
+			Tool = %MeGuiPath%tools\avs2pipemod\avs2pipemod.exe
+			Script = -wav "%2%.avs"
+			RunWait, %comspec% /c %Tool% %Script% | %MeGuiPath%tools\oggenc2\oggenc2.exe -Q --ignorelength --quality 2.0 -o "%2%_track1.ogg" -,, Min UseErrorLevel
 			
 			if ErrorLevel = 0
 			{
-				FileDelete, %2%.avs
-				FileDelete, %2%.ffindex
-				FileDelete, %2%_track1.ogg
-			}
-		}
-	}
-	else if 1 contains -r
-	{
-		g_bRotateOnly := true
-		
-		Loop %0%  ; For each parameter (or file dropped onto a script):
-		{
-			;Ersten Parameter überspringen
-			if A_Index = 1
-				continue
+				sFileOut = %2%
+				StringTrimRight, sFileOut, sFileOut, 4
 				
-			FileLongPath := %A_Index% ; Fetch the contents of the variable whose name is contained in A_Index.
-			
-			IfNotExist %FileLongPath% ; Sicher gehen dass es die datei gibt
-				continue
-			
-			g_sRotate = #NoRotate
-			if 1 = -rr ;Explizites drehen rechts
-				g_sRotate = TurnRight()
-			if 1 = -rl ;Explizites drehen links
-				g_sRotate = TurnLeft()
-			
-			SplitPath, FileLongPath, OutFileName, OutDir, OutExtension, OutNameNoExt, OutDrive
-			StringLower, OutExtension, OutExtension
-
-			;wenn eine _org.* datei existiert, überspringen
-			IfExist %OutDir%\%OutNameNoExt%_org.*
-				continue
-
-			;sind wir selbst eine _org.* datei?
-			StringRight, OrgStr, OutNameNoExt, 4
-			If OrgStr = _org
-				continue
-			
-			sTempWorkDir = %A_ScriptDir%\tmp_%OutNameNoExt%
-			FileCreateDir, %sTempWorkDir%
-			FileCopy, %FileLongPath%, %sTempWorkDir%, 1
-			FileLongPath = %sTempWorkDir%\%OutFileName%
-			
-			; Convertierung an eine Funktion übergeben
-			ConvertFile(FileLongPath, OutExtension)
-
-			; Temporäre Dateien wieder entfernen, nur wenn kein Fehler
-			IfExist %sTempWorkDir%\%OutNameNoExt%_.mp4
-			{
-				FileMove, %OutDir%\%OutNameNoExt%.%OutExtension%, %OutDir%\%OutNameNoExt%_org.%OutExtension%
-				FileMove, %sTempWorkDir%\%OutNameNoExt%_.mp4, %OutDir%\%OutNameNoExt%.mp4
-				FileRemoveDir, %sTempWorkDir%, 1
+				Tool = %MeGuiPath%tools\mkvmerge\mkvmerge.exe
+				RunWait, %comspec% /c %Tool% -o "%2%.mkv" --engage keep_bitstream_ar_info "--compression" "0:none" -d "0" --no-chapters -A -S "%sFileOut%.mkv" "--compression" "0:none" -a 0 --no-chapters -D -S "%2%_track1.ogg" --engage no_cue_duration --engage no_cue_relative_position --ui-language en,, Min UseErrorLevel
+				
+				if ErrorLevel = 0
+				{
+					FileDelete, %2%.avs
+					FileDelete, %2%.ffindex
+					FileDelete, %2%_track1.ogg
+				}
 			}
 		}
-		SoundPlay *-1
+		else if 1 contains -r
+		{
+			g_bRotateOnly := true
+			
+			Loop %0%  ; For each parameter (or file dropped onto a script):
+			{
+				;Ersten Parameter überspringen
+				if A_Index = 1
+					continue
+					
+				FileLongPath := %A_Index% ; Fetch the contents of the variable whose name is contained in A_Index.
+				
+				IfNotExist %FileLongPath% ; Sicher gehen dass es die datei gibt
+					continue
+				
+				g_sRotate = #NoRotate
+				if 1 = -rr ;Explizites drehen rechts
+					g_sRotate = TurnRight()
+				if 1 = -rl ;Explizites drehen links
+					g_sRotate = TurnLeft()
+				
+				SplitPath, FileLongPath, OutFileName, OutDir, OutExtension, OutNameNoExt, OutDrive
+				StringLower, OutExtension, OutExtension
+
+				;wenn eine _org.* datei existiert, überspringen
+				IfExist %OutDir%\%OutNameNoExt%_org.*
+					continue
+
+				;sind wir selbst eine _org.* datei?
+				StringRight, OrgStr, OutNameNoExt, 4
+				If OrgStr = _org
+					continue
+				
+				sTempWorkDir = %A_ScriptDir%\tmp_%OutNameNoExt%
+				FileCreateDir, %sTempWorkDir%
+				FileCopy, %FileLongPath%, %sTempWorkDir%, 1
+				FileLongPath = %sTempWorkDir%\%OutFileName%
+				
+				; Convertierung an eine Funktion übergeben
+				ConvertFile(FileLongPath, OutExtension)
+
+				; Temporäre Dateien wieder entfernen, nur wenn kein Fehler
+				IfExist %sTempWorkDir%\%OutNameNoExt%_.mp4
+				{
+					FileMove, %OutDir%\%OutNameNoExt%.%OutExtension%, %OutDir%\%OutNameNoExt%_org.%OutExtension%
+					FileMove, %sTempWorkDir%\%OutNameNoExt%_.mp4, %OutDir%\%OutNameNoExt%.mp4
+					FileRemoveDir, %sTempWorkDir%, 1
+				}
+				
+				if g_bAbort ;Wenn Abbruchbefehl, abrrechen
+					break
+			}
+			SoundPlay *-1
+		}
+		else
+			MsgBox Falsche Parameter!`nNur -ao/-rr akzeptiert!
+			
+		ExitApp
 	}
-	else
-		MsgBox Falsche Parameter!`nNur -ao/-rr akzeptiert!
-		
-	ExitApp
 }
 
 ;-- Alle Dateien durchgehen
@@ -239,7 +256,7 @@ ExitApp
 ;-------------------------------------------------------------------------------------------------------------------
 ConvertFile(sFileName, sFileExt) 
 {
-	global MeGuiPath, nHiReso, nHiBpS, nMiReso, nMiBpS, nLoReso, nLoBpS, sCommand, NetWorkMode, nRotOnlyRes, nRotOnlyBps, sFileNamePure, g_sRotate, g_bRotateOnly, g_bPortraitMode, sTempWorkDir, g_bUseLSMASH
+	global MeGuiPath, nHiReso, nHiBpS, nMiReso, nMiBpS, nLoReso, nLoBpS, sCommand, NetWorkMode, nRotOnlyRes, nRotOnlyBps, sFileNamePure, g_sRotate, g_bRotateOnly, g_bPortraitMode, sTempWorkDir, g_bUseLSMASH, g_bSeriesConvert, g_bSeriesConvertAnim, nSeriesBps, nSeriesABps
 	Menu, tray, tip, %A_ScriptName%`nCurrent: %sFileName%
 	
 	StringTrimRight, sFileNameOut, sFileName, 4
@@ -260,8 +277,8 @@ ConvertFile(sFileName, sFileExt)
 		return
 	}
 	
-	; Bei avi, mp4, mpg erstmal in mkv muxen und dann ganz normal mit mkv weitermachen, nicht im rotationsmodus
-	if (g_bRotateOnly = false)
+	; Bei avi, mp4, mpg erstmal in mkv muxen und dann ganz normal mit mkv weitermachen, nicht im rotations- oder serienmodus
+	if (g_bRotateOnly = false AND g_bSeriesConvert = false)
 		if sFileExt in avi,mp4,mpg,mov,flv
 		{
 			; Im Netzwerkmodus lokal arbeiten
@@ -402,7 +419,7 @@ ConvertFile(sFileName, sFileExt)
 				AppendLogFile(sFileName, 2, "not necessary")
 		}
 		
-		;bei avi,mkv,mp4,mpg,mov,wmv audio über BePipe decodieren
+		;bei avi,mkv,mp4,mpg,mov,wmv audio über BePipe oder avs2pipemod decodieren
 		if (bStep3 = false AND nAudioCount > 0)
 		{
 			if sFileExt in avi,mkv,mp4,mpg,mov,wmv,flv
@@ -430,6 +447,12 @@ ConvertFile(sFileName, sFileExt)
 					{
 						bTryAvs2Pipe := true
 						TargetCommand = %MeGuiPath%tools\neroaacenc\win32\neroAacEnc.exe -ignorelength -q 0.5 -if - -of "%sFileName%.m4a"
+					}
+					else if (g_bSeriesConvert)
+					{
+						bTryAvs2Pipe := true
+						bTryAvs2Pipe2 := true
+						TargetCommand = %MeGuiPath%tools\lame\lame.exe -b %nSeriesABps% -h - "%sFileName%.mp3"
 					}
 					
 					if ((bTryAvs2Pipe = false AND (sFileExt = "avi" OR bTryDS)) OR (sFileExt = "wmv" AND bWMVasDS))
@@ -478,7 +501,7 @@ ConvertFile(sFileName, sFileExt)
 						}	
 					}
 					
-					If (!FileExist(sFileName "_track1.ogg") AND !FileExist(sFileName ".m4a"))
+					If (!FileExist(sFileName "_track1.ogg") AND !FileExist(sFileName ".m4a") AND !FileExist(sFileName ".mp3"))
 					{
 						sCommand = Flags: bTryDS=%bTryDS%, bWMVasDS=%bWMVasDS%, bTryAvs2Pipe=%bTryAvs2Pipe%, bTryAvs2Pipe2=%bTryAvs2Pipe2%, bTryAvs2Pipe3=%bTryAvs2Pipe3%`n%ToolPathAndName% %LoadPlugin% %RunScript% | %TargetCommand%
 						CreateErrorFile(sFileName, sCommand, ErrorLevel, A_LastError)
@@ -513,22 +536,28 @@ ConvertFile(sFileName, sFileExt)
 		;bitrate bestimmen
 		nTemp := g_bPortraitMode ? nHeight : nWidth
 		nBitrate := nLoBpS
-		if nTemp >= %nHiReso%
+		sTune =
+		
+		if (g_bRotateOnly)
+			nBitrate := nRotOnlyBps
+		else if (g_bSeriesConvert)
+			nBitrate := nSeriesBps
+		else if nTemp >= %nHiReso%
 			nBitrate := nHiBpS
 		else if nTemp >= %nMiReso%
 			nBitrate := nMiBpS
 		
-		if (g_bRotateOnly)
-			nBitrate := nRotOnlyBps
+		if (g_bSeriesConvertAnim)
+			sTune = --tune animation
 		
 		;erster und zweiter pass
 		if (bStep4 = false)
 		{
 			ToolPathAndName = %MeGuiPath%tools\x264\avs4x264mod.exe
-			RunWait, %comspec% /c %ToolPathAndName% --pass 1 --bitrate %nBitrate% --stats "%sFileName%.stats" --sar 1:1 --output NUL "%sFileName%.avs",, Min UseErrorLevel
+			RunWait, %comspec% /c %ToolPathAndName% --pass 1 %sTune% --bitrate %nBitrate% --stats "%sFileName%.stats" --sar 1:1 --output NUL "%sFileName%.avs",, Min UseErrorLevel
 			if ErrorLevel != 0
 			{
-				sCommand = %ToolPathAndName% --pass 1 --bitrate %nBitrate% --stats "%sFileName%.stats" --sar 1:1 --output NUL "%sFileName%.avs"
+				sCommand = %ToolPathAndName% --pass 1 %sTune% --bitrate %nBitrate% --stats "%sFileName%.stats" --sar 1:1 --output NUL "%sFileName%.avs"
 				CreateErrorFile(sFileName, sCommand, ErrorLevel, A_LastError)
 				return
 			}
@@ -539,10 +568,10 @@ ConvertFile(sFileName, sFileExt)
 		if (bStep5 = false)
 		{
 			ToolPathAndName = %MeGuiPath%tools\x264\avs4x264mod.exe
-			RunWait, %comspec% /c %ToolPathAndName% --pass 2 --bitrate %nBitrate% --stats "%sFileName%.stats" --sar 1:1 --output "%sFileName%.264" "%sFileName%.avs",, Min UseErrorLevel
+			RunWait, %comspec% /c %ToolPathAndName% --pass 2 %sTune% --bitrate %nBitrate% --stats "%sFileName%.stats" --sar 1:1 --output "%sFileName%.264" "%sFileName%.avs",, Min UseErrorLevel
 			if ErrorLevel != 0
 			{
-				sCommand = %ToolPathAndName% --pass 2 --bitrate %nBitrate% --stats "%sFileName%.stats" --sar 1:1 --output "%sFileName%.264" "%sFileName%.avs"
+				sCommand = %ToolPathAndName% --pass 2 %sTune% --bitrate %nBitrate% --stats "%sFileName%.stats" --sar 1:1 --output "%sFileName%.264" "%sFileName%.avs"
 				CreateErrorFile(sFileName, sCommand, ErrorLevel, A_LastError)
 				return
 			}
@@ -578,8 +607,13 @@ ConvertFile(sFileName, sFileExt)
 				;Audio überhaupt vorhanden?
 				AudioCommand =
 				if (nAudioCount > 0)
-					AudioCommand = -D -S "%sFileName%_track1.ogg"
-
+				{
+					if (g_bSeriesConvert)
+						AudioCommand = -D -S "%sFileName%.mp3"
+					else
+						AudioCommand = -D -S "%sFileName%_track1.ogg"
+				}
+				
 				TargetCommand = -o "%sFileNameOut%.mkv" --engage keep_bitstream_ar_info "--compression" "0:none" -d "0" --no-chapters -A -S "%sFileName%.264" "--compression" "0:none" -a 0 --no-chapters %AudioCommand% --engage no_cue_duration --engage no_cue_relative_position --ui-language en
 			}
 			
@@ -603,6 +637,8 @@ ConvertFile(sFileName, sFileExt)
 			FileDelete, %sFileName%_audio3.avs
 			FileDelete, %sFileName%.ffindex
 			FileDelete, %sFileName%.lwi
+			FileDelete, %sFileName%.m4a
+			FileDelete, %sFileName%.mp3
 			FileDelete, %sFileName%_track1.ogg
 			FileDelete, %sFileName%.stats
 			FileDelete, %sFileName%.stats.mbtree
@@ -617,7 +653,7 @@ ConvertFile(sFileName, sFileExt)
 ;-------------------------------------------------------------------------------------------------------------------
 CreateAvsFile(sFileName, sFileExt, nWidth, nHeight, nFPS, bForceDS=0)
 {
-	global MeGuiPath, nHiReso, nMiReso, nLoReso, nRotOnlyRes, g_sRotate, g_bRotateOnly, g_bPortraitMode, g_bUseLSMASH
+	global MeGuiPath, nHiReso, nMiReso, nLoReso, nRotOnlyRes, g_sRotate, g_bRotateOnly, g_bPortraitMode, g_bUseLSMASH, g_bSeriesConvert, nSeriesRes
 	sParams = %sFileName%, %sFileExt%, %nWidth%, %nHeight%, %nFPS%, ForceDS:%bForceDS%, UseLSMASH:%g_bUseLSMASH%
 	bExtraAudioAvs := true ;einfach immer anlegen, schadet nix
 	
@@ -674,7 +710,12 @@ CreateAvsFile(sFileName, sFileExt, nWidth, nHeight, nFPS, bForceDS=0)
 	;Auflösung für resize bestimmen
 	nWidthNew := nWidth
 	
-	if (g_bRotateOnly)
+	if (g_bSeriesConvert)
+	{
+		if (nWidth > nSeriesRes)
+			nWidthNew := nSeriesRes
+	}
+	else if (g_bRotateOnly)
 	{
 		if (nWidth > nRotOnlyRes)
 			nWidthNew := nRotOnlyRes
